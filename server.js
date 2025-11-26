@@ -17,7 +17,7 @@ const INVENTARIO_FILE = path.join(__dirname, 'datos', 'inventario.json');
 const VENTAS_FILE = path.join(__dirname, 'datos', 'ventas.json');
 const COMPROBANTES_DIR = path.join(__dirname, 'comprobantes');
 
-// Asegurar que la carpeta de comprobantes y datos existan
+// Asegurar directorios
 if (!fs.existsSync(path.join(__dirname, 'datos'))) {
     fs.mkdirSync(path.join(__dirname, 'datos'));
 }
@@ -51,10 +51,8 @@ function guardarDatos(ruta, datos) {
     }
 }
 
-// Función para generar el archivo de texto del ticket
 function generarTicketTxt(venta) {
     const fecha = new Date();
-    // Nombre de archivo seguro
     const nombreArchivo = `ticket_${fecha.getFullYear()}-${(fecha.getMonth()+1).toString().padStart(2, '0')}-${fecha.getDate().toString().padStart(2, '0')}_${fecha.getHours().toString().padStart(2, '0')}-${fecha.getMinutes().toString().padStart(2, '0')}-${fecha.getSeconds().toString().padStart(2, '0')}.txt`;
     const rutaArchivo = path.join(COMPROBANTES_DIR, nombreArchivo);
 
@@ -86,21 +84,26 @@ function generarTicketTxt(venta) {
     }
 }
 
-// --- ENDPOINTS (API) ---
+// --- ENDPOINTS ---
 
-// 1. Obtener Inventario
 app.get('/api/inventario', (req, res) => {
     const productos = leerDatos(INVENTARIO_FILE);
     res.json(productos);
 });
 
-// 2. Obtener Ventas
 app.get('/api/ventas', (req, res) => {
     const ventas = leerDatos(VENTAS_FILE);
     res.json(ventas);
 });
 
-// 3. Obtener CAJA DIARIA (NUEVO)
+// NUEVO: Obtener ultimas 3 ventas para el historial
+app.get('/api/ventas-recientes', (req, res) => {
+    const ventas = leerDatos(VENTAS_FILE);
+    // Tomamos las ultimas 3 y las invertimos para que la más reciente salga primero
+    const recientes = ventas.slice(-3).reverse();
+    res.json(recientes);
+});
+
 app.get('/api/caja-diaria', (req, res) => {
     const ventas = leerDatos(VENTAS_FILE);
     const hoy = new Date();
@@ -120,7 +123,6 @@ app.get('/api/caja-diaria', (req, res) => {
     });
 });
 
-// 4. Registrar Venta
 app.post('/api/ventas', (req, res) => {
     const nuevaVenta = req.body;
 
@@ -131,10 +133,8 @@ app.post('/api/ventas', (req, res) => {
     const inventario = leerDatos(INVENTARIO_FILE);
     let stockInsuficiente = false;
 
-    // A. Validar y descontar stock
     nuevaVenta.items.forEach(itemVenta => {
         const productoEnInventario = inventario.find(p => p.id === itemVenta.id);
-        
         if (productoEnInventario) {
             if (productoEnInventario.stock >= itemVenta.cantidad) {
                 productoEnInventario.stock -= itemVenta.cantidad;
@@ -145,25 +145,21 @@ app.post('/api/ventas', (req, res) => {
     });
 
     if (stockInsuficiente) {
-        return res.status(400).json({ error: 'No hay suficiente stock para realizar la venta.' });
+        return res.status(400).json({ error: 'No hay suficiente stock.' });
     }
 
-    // B. Guardar cambios en inventario
     guardarDatos(INVENTARIO_FILE, inventario);
 
-    // C. Guardar la venta
     const ventas = leerDatos(VENTAS_FILE);
     nuevaVenta.fecha = nuevaVenta.fecha || new Date().toISOString();
     ventas.push(nuevaVenta);
     guardarDatos(VENTAS_FILE, ventas);
 
-    // D. Generar Ticket TXT
     generarTicketTxt(nuevaVenta);
 
     res.json({ message: 'Venta registrada con éxito', venta: nuevaVenta });
 });
 
-// 5. Agregar Producto Nuevo
 app.post('/api/productos', (req, res) => {
     const productoNuevo = req.body;
     const inventario = leerDatos(INVENTARIO_FILE);
@@ -178,7 +174,6 @@ app.post('/api/productos', (req, res) => {
     res.json({ message: 'Producto guardado', producto: productoNuevo });
 });
 
-// Iniciar servidor
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
     console.log(`- Datos en: ${path.join(__dirname, 'datos')}`);

@@ -47,7 +47,7 @@
         </section>
 
         <section class="cart-section">
-            <h2>Carrito de Compras</h2>
+            <h2 class="section-title">Carrito de Compras</h2>
             <div id="cart-items" class="cart-items">
                 <p class="empty-msg">El carrito está vacío</p>
             </div>
@@ -71,15 +71,21 @@
                 </div>
                 <button id="btn-checkout" class="btn-checkout" onclick="procesarVenta()">Confirmar Venta</button>
             </div>
+
+            <div class="history-container">
+                <h3>Últimas 3 Ventas</h3>
+                <div id="history-list" class="history-list">
+                    </div>
+            </div>
         </section>
     </main>
 
     <script>
-        // Estado de la aplicación
+        // Estado
         let inventario = [];
         let carrito = [];
 
-        // Elementos del DOM
+        // Elementos DOM
         const gridProductos = document.getElementById('products-grid');
         const listaCarrito = document.getElementById('cart-items');
         const elSubtotal = document.getElementById('subtotal');
@@ -89,8 +95,9 @@
         const inputBusqueda = document.getElementById('search-input');
         const formProducto = document.getElementById('form-producto');
         const elCajaMonto = document.getElementById('caja-dia-monto');
+        const elHistorial = document.getElementById('history-list');
 
-        // --- FUNCIONES DE INICIO ---
+        // --- CARGA INICIAL ---
         
         async function cargarInventario() {
             try {
@@ -108,33 +115,54 @@
                 const res = await fetch('/api/caja-diaria');
                 const data = await res.json();
                 elCajaMonto.textContent = `$${data.total.toFixed(2)}`;
-                
-                // Animación simple
                 elCajaMonto.style.color = '#4ade80';
                 setTimeout(() => elCajaMonto.style.color = '', 500);
-            } catch (error) {
-                console.error('Error cargando caja:', error);
-            }
+            } catch (error) { console.error(error); }
+        }
+
+        async function cargarHistorial() {
+            try {
+                const res = await fetch('/api/ventas-recientes');
+                const ventas = await res.json();
+                elHistorial.innerHTML = '';
+
+                if (ventas.length === 0) {
+                    elHistorial.innerHTML = '<p class="mini-msg">Sin ventas recientes.</p>';
+                    return;
+                }
+
+                ventas.forEach(v => {
+                    const fecha = new Date(v.fecha);
+                    const hora = fecha.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    const div = document.createElement('div');
+                    div.className = 'history-item';
+                    div.innerHTML = `
+                        <div class="h-left">
+                            <span class="h-time">${hora}</span>
+                            <span class="h-items">${v.items.length} items</span>
+                        </div>
+                        <div class="h-total">$${v.total.toFixed(2)}</div>
+                    `;
+                    elHistorial.appendChild(div);
+                });
+            } catch (error) { console.error('Error historial:', error); }
         }
 
         // --- PRODUCTOS ---
 
         function renderizarProductos(filtro = '') {
             gridProductos.innerHTML = '';
-            
-            const productosFiltrados = inventario.filter(p => 
-                p.nombre.toLowerCase().includes(filtro.toLowerCase())
-            );
+            const filtrados = inventario.filter(p => p.nombre.toLowerCase().includes(filtro.toLowerCase()));
 
-            if (productosFiltrados.length === 0) {
+            if (filtrados.length === 0) {
                 gridProductos.innerHTML = '<p>No se encontraron productos.</p>';
                 return;
             }
 
-            productosFiltrados.forEach(producto => {
+            filtrados.forEach(producto => {
                 const card = document.createElement('div');
                 card.className = 'product-card';
-                
                 const sinStock = producto.stock <= 0;
                 
                 card.innerHTML = `
@@ -143,11 +171,7 @@
                         <div class="product-price">$${producto.precio}</div>
                         <div class="product-stock">Stock: ${producto.stock} u.</div>
                     </div>
-                    <button 
-                        class="btn-add" 
-                        onclick="agregarAlCarrito(${producto.id})"
-                        ${sinStock ? 'disabled' : ''}
-                    >
+                    <button class="btn-add" onclick="agregarAlCarrito(${producto.id})" ${sinStock ? 'disabled' : ''}>
                         ${sinStock ? 'Sin Stock' : 'Agregar'}
                     </button>
                 `;
@@ -156,8 +180,7 @@
         }
 
         function filtrarProductos() {
-            const texto = inputBusqueda.value;
-            renderizarProductos(texto);
+            renderizarProductos(inputBusqueda.value);
         }
 
         function toggleFormulario() {
@@ -170,73 +193,53 @@
             const stock = parseInt(document.getElementById('new-stock').value);
 
             if (!nombre || isNaN(precio) || isNaN(stock)) {
-                alert('Por favor complete todos los campos correctamente.');
+                alert('Complete todos los campos.');
                 return;
             }
-
-            const nuevoProducto = { nombre, precio, stock };
 
             try {
                 const res = await fetch('/api/productos', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(nuevoProducto)
+                    body: JSON.stringify({ nombre, precio, stock })
                 });
 
                 if (res.ok) {
-                    alert('Producto agregado correctamente');
+                    alert('Producto agregado');
                     document.getElementById('new-nombre').value = '';
                     document.getElementById('new-precio').value = '';
                     document.getElementById('new-stock').value = '';
                     toggleFormulario();
                     cargarInventario(); 
-                } else {
-                    alert('Error al guardar producto');
                 }
-            } catch (error) {
-                console.error(error);
-                alert('Error de conexión');
-            }
+            } catch (error) { alert('Error de conexión'); }
         }
 
         // --- CARRITO ---
 
         function agregarAlCarrito(id) {
             const producto = inventario.find(p => p.id === id);
-            const itemEnCarrito = carrito.find(item => item.id === id);
-            const cantidadEnCarrito = itemEnCarrito ? itemEnCarrito.cantidad : 0;
+            const itemEnCarrito = carrito.find(i => i.id === id);
+            const cant = itemEnCarrito ? itemEnCarrito.cantidad : 0;
 
-            if (producto.stock > cantidadEnCarrito) {
-                if (itemEnCarrito) {
-                    itemEnCarrito.cantidad++;
-                } else {
-                    carrito.push({
-                        id: producto.id,
-                        nombre: producto.nombre,
-                        precio: producto.precio,
-                        cantidad: 1
-                    });
-                }
+            if (producto.stock > cant) {
+                if (itemEnCarrito) itemEnCarrito.cantidad++;
+                else carrito.push({ id: producto.id, nombre: producto.nombre, precio: producto.precio, cantidad: 1 });
                 renderizarCarrito();
             } else {
-                alert('No hay suficiente stock disponible.');
+                alert('Stock insuficiente.');
             }
         }
 
         function cambiarCantidad(id, delta) {
             const item = carrito.find(i => i.id === id);
-            const producto = inventario.find(p => p.id === id);
-            
+            const prod = inventario.find(p => p.id === id);
             if (!item) return;
 
-            const nuevaCantidad = item.cantidad + delta;
-
-            if (nuevaCantidad > 0) {
-                if (delta > 0 && nuevaCantidad > producto.stock) {
-                    alert('No hay más stock disponible.');
-                    return;
-                }
-                item.cantidad = nuevaCantidad;
+            const nueva = item.cantidad + delta;
+            if (nueva > 0) {
+                if (delta > 0 && nueva > prod.stock) return alert('Stock límite alcanzado');
+                item.cantidad = nueva;
             } else {
                 quitarDelCarrito(id);
                 return;
@@ -245,53 +248,45 @@
         }
 
         function quitarDelCarrito(id) {
-            const index = carrito.findIndex(item => item.id === id);
-            if (index !== -1) {
-                carrito.splice(index, 1);
-                renderizarCarrito();
-            }
+            const idx = carrito.findIndex(i => i.id === id);
+            if (idx !== -1) carrito.splice(idx, 1);
+            renderizarCarrito();
         }
 
         function renderizarCarrito() {
             listaCarrito.innerHTML = '';
-            
             if (carrito.length === 0) {
                 listaCarrito.innerHTML = '<p class="empty-msg">El carrito está vacío</p>';
                 actualizarTotales(0);
                 return;
             }
 
-            let subtotalAcumulado = 0;
-
+            let subtotal = 0;
             carrito.forEach(item => {
-                const subtotalItem = item.cantidad * item.precio;
-                subtotalAcumulado += subtotalItem;
-                
+                const s = item.cantidad * item.precio;
+                subtotal += s;
                 const div = document.createElement('div');
                 div.className = 'cart-item';
                 div.innerHTML = `
                     <div class="cart-item-info">
                         <h4>${item.nombre}</h4>
-                        <span>$${item.precio} c/u</span>
+                        <span>$${item.precio}</span>
                     </div>
                     <div class="cart-controls">
                         <button class="btn-qty" onclick="cambiarCantidad(${item.id}, -1)">-</button>
                         <span class="qty-display">${item.cantidad}</span>
                         <button class="btn-qty" onclick="cambiarCantidad(${item.id}, 1)">+</button>
                     </div>
-                    <div class="cart-price">
-                        <strong>$${subtotalItem}</strong>
-                    </div>
+                    <div class="cart-price"><strong>$${s}</strong></div>
                 `;
                 listaCarrito.appendChild(div);
             });
-
-            actualizarTotales(subtotalAcumulado);
+            actualizarTotales(subtotal);
         }
 
         function actualizarTotales(subtotal) {
-            const tasaIva = parseFloat(elIvaRate.value) || 0;
-            const iva = subtotal * (tasaIva / 100);
+            const ivaPct = parseFloat(elIvaRate.value) || 0;
+            const iva = subtotal * (ivaPct / 100);
             const total = subtotal + iva;
 
             elSubtotal.textContent = `$${subtotal.toFixed(2)}`;
@@ -300,52 +295,42 @@
         }
 
         async function procesarVenta() {
-            if (carrito.length === 0) {
-                alert('El carrito está vacío.');
-                return;
-            }
+            if (carrito.length === 0) return alert('Carrito vacío');
 
-            const subtotalText = elSubtotal.textContent.replace('$','');
-            const subtotal = parseFloat(subtotalText);
-            const tasaIva = parseFloat(elIvaRate.value);
-            const totalText = elTotal.textContent.replace('$','');
-            const total = parseFloat(totalText);
+            const subtotal = parseFloat(elSubtotal.textContent.replace('$',''));
+            const ivaPct = parseFloat(elIvaRate.value);
+            const total = parseFloat(elTotal.textContent.replace('$',''));
 
-            const ventaData = {
-                fecha: new Date().toISOString(),
+            const data = {
                 items: carrito.map(i => ({...i, subtotal: i.cantidad * i.precio})),
-                subtotal: subtotal,
-                iva_porcentaje: tasaIva,
-                total: total
+                subtotal, iva_porcentaje: ivaPct, total
             };
 
             try {
                 const res = await fetch('/api/ventas', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(ventaData)
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
                 });
-
-                const resultado = await res.json();
+                const json = await res.json();
 
                 if (res.ok) {
-                    alert('¡Venta realizada con éxito! Ticket generado.');
+                    alert('Venta exitosa. Ticket generado.');
                     carrito = [];
                     renderizarCarrito();
-                    cargarInventario(); // Recargar stock
-                    actualizarCajaDiaria(); // Actualizar caja
+                    cargarInventario();
+                    actualizarCajaDiaria();
+                    cargarHistorial(); // Actualizar historial
                 } else {
-                    alert('Error: ' + resultado.error);
+                    alert('Error: ' + json.error);
                 }
-            } catch (error) {
-                console.error('Error procesando venta:', error);
-                alert('Error de conexión.');
-            }
+            } catch (e) { alert('Error de conexión'); }
         }
 
         // Inicio
         cargarInventario();
         actualizarCajaDiaria();
+        cargarHistorial();
     </script>
 </body>
 </html>
