@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Punto de Venta</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>Sistema de Ventas</h1>
+    </header>
+
+    <main>
+        <section class="products-section">
+            <h2>Inventario Disponible</h2>
+            <div id="products-grid" class="products-grid">
+                <p>Cargando productos...</p>
+            </div>
+        </section>
+
+        <section class="cart-section">
+            <h2>Carrito de Compras</h2>
+            <div id="cart-items" class="cart-items">
+                <p style="text-align: center; color: #999; margin-top: 2rem;">El carrito está vacío</p>
+            </div>
+
+            <div class="cart-summary">
+                <div class="summary-row">
+                    <span>Subtotal:</span>
+                    <span id="subtotal">$0</span>
+                </div>
+                <div class="summary-row">
+                    <span>IVA (21%):</span>
+                    <span id="iva">$0</span>
+                </div>
+                <div class="summary-row total-row">
+                    <span>Total:</span>
+                    <span id="total">$0</span>
+                </div>
+                <button id="btn-checkout" class="btn-checkout" onclick="procesarVenta()">Confirmar Venta</button>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Estado de la aplicación
+        let inventario = [];
+        let carrito = [];
+
+        // Elementos del DOM
+        const gridProductos = document.getElementById('products-grid');
+        const listaCarrito = document.getElementById('cart-items');
+        const elSubtotal = document.getElementById('subtotal');
+        const elIva = document.getElementById('iva');
+        const elTotal = document.getElementById('total');
+
+        // 1. Cargar productos al iniciar
+        async function cargarInventario() {
+            try {
+                const res = await fetch('/api/inventario');
+                inventario = await res.json();
+                renderizarProductos();
+            } catch (error) {
+                console.error('Error cargando inventario:', error);
+                gridProductos.innerHTML = '<p>Error al conectar con el servidor.</p>';
+            }
+        }
+
+        // 2. Renderizar (dibujar) los productos en pantalla
+        function renderizarProductos() {
+            gridProductos.innerHTML = '';
+            inventario.forEach(producto => {
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                
+                // Deshabilitar botón si no hay stock
+                const sinStock = producto.stock <= 0;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="product-name">${producto.nombre}</div>
+                        <div class="product-price">$${producto.precio}</div>
+                        <div class="product-stock">Stock: ${producto.stock} u.</div>
+                    </div>
+                    <button 
+                        class="btn-add" 
+                        onclick="agregarAlCarrito(${producto.id})"
+                        ${sinStock ? 'disabled' : ''}
+                    >
+                        ${sinStock ? 'Sin Stock' : 'Agregar'}
+                    </button>
+                `;
+                gridProductos.appendChild(card);
+            });
+        }
+
+        // 3. Lógica del Carrito
+        function agregarAlCarrito(id) {
+            const producto = inventario.find(p => p.id === id);
+            const itemEnCarrito = carrito.find(item => item.id === id);
+
+            // Verificar stock localmente antes de agregar
+            const cantidadActual = itemEnCarrito ? itemEnCarrito.cantidad : 0;
+            
+            if (producto.stock > cantidadActual) {
+                if (itemEnCarrito) {
+                    itemEnCarrito.cantidad++;
+                    itemEnCarrito.subtotal = itemEnCarrito.cantidad * itemEnCarrito.precio;
+                } else {
+                    carrito.push({
+                        id: producto.id,
+                        nombre: producto.nombre,
+                        precio: producto.precio,
+                        cantidad: 1,
+                        subtotal: producto.precio
+                    });
+                }
+                renderizarCarrito();
+            } else {
+                alert('No hay más stock disponible de este producto.');
+            }
+        }
+
+        function quitarDelCarrito(id) {
+            const index = carrito.findIndex(item => item.id === id);
+            if (index !== -1) {
+                carrito.splice(index, 1);
+                renderizarCarrito();
+            }
+        }
+
+        function renderizarCarrito() {
+            listaCarrito.innerHTML = '';
+            
+            if (carrito.length === 0) {
+                listaCarrito.innerHTML = '<p style="text-align: center; color: #999; margin-top: 2rem;">El carrito está vacío</p>';
+                actualizarTotales(0);
+                return;
+            }
+
+            let subtotalAcumulado = 0;
+
+            carrito.forEach(item => {
+                subtotalAcumulado += item.subtotal;
+                
+                const div = document.createElement('div');
+                div.className = 'cart-item';
+                div.innerHTML = `
+                    <div class="cart-item-info">
+                        <h4>${item.nombre} (x${item.cantidad})</h4>
+                        <span>$${item.precio} c/u</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <strong>$${item.subtotal}</strong>
+                        <button class="btn-remove" onclick="quitarDelCarrito(${item.id})">X</button>
+                    </div>
+                `;
+                listaCarrito.appendChild(div);
+            });
+
+            actualizarTotales(subtotalAcumulado);
+        }
+
+        function actualizarTotales(subtotal) {
+            const iva = subtotal * 0.21;
+            const total = subtotal + iva;
+
+            elSubtotal.textContent = `$${subtotal.toFixed(2)}`;
+            elIva.textContent = `$${iva.toFixed(2)}`;
+            elTotal.textContent = `$${total.toFixed(2)}`;
+        }
+
+        // 4. Procesar Venta (Enviar al Backend)
+        async function procesarVenta() {
+            if (carrito.length === 0) {
+                alert('El carrito está vacío.');
+                return;
+            }
+
+            const subtotal = carrito.reduce((acc, item) => acc + item.subtotal, 0);
+            const iva = subtotal * 0.21;
+            const total = subtotal + iva;
+
+            const ventaData = {
+                fecha: new Date().toISOString(),
+                items: carrito,
+                subtotal: subtotal,
+                iva_porcentaje: 21,
+                total: total
+            };
+
+            try {
+                const res = await fetch('/api/ventas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(ventaData)
+                });
+
+                const resultado = await res.json();
+
+                if (res.ok) {
+                    alert('¡Venta realizada con éxito!');
+                    carrito = []; // Vaciar carrito
+                    renderizarCarrito();
+                    cargarInventario(); // Recargar productos para ver stock actualizado
+                } else {
+                    alert('Error: ' + resultado.error);
+                }
+            } catch (error) {
+                console.error('Error procesando venta:', error);
+                alert('Error de conexión al procesar la venta.');
+            }
+        }
+
+        // Iniciar
+        cargarInventario();
+    </script>
+</body>
+</html>

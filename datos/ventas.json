@@ -1,0 +1,17 @@
+[
+  {
+    "fecha": "2025-11-26T13:06:54.188Z",
+    "items": [
+      {
+        "id": 1,
+        "nombre": "remera",
+        "precio": 4000,
+        "cantidad": 6,
+        "subtotal": 24000
+      }
+    ],
+    "subtotal": 24000,
+    "iva_porcentaje": 21,
+    "total": 29040
+  }
+]
