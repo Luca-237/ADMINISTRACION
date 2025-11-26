@@ -13,5 +13,49 @@
     "subtotal": 24000,
     "iva_porcentaje": 21,
     "total": 29040
+  },
+  {
+    "fecha": "2025-11-26T20:55:42.296Z",
+    "items": [
+      {
+        "id": 2,
+        "nombre": "Remera citroen negra",
+        "precio": 2000,
+        "cantidad": 2,
+        "subtotal": 4000
+      },
+      {
+        "id": 1,
+        "nombre": "remera",
+        "precio": 4000,
+        "cantidad": 6,
+        "subtotal": 24000
+      }
+    ],
+    "subtotal": 28000,
+    "iva_porcentaje": 21,
+    "total": 33880
+  },
+  {
+    "fecha": "2025-11-26T21:00:06.987Z",
+    "items": [
+      {
+        "id": 2,
+        "nombre": "Remera citroen negra",
+        "precio": 2000,
+        "cantidad": 1,
+        "subtotal": 2000
+      },
+      {
+        "id": 1,
+        "nombre": "remera",
+        "precio": 4000,
+        "cantidad": 1,
+        "subtotal": 4000
+      }
+    ],
+    "subtotal": 6000,
+    "iva_porcentaje": 21,
+    "total": 7260
   }
 ]

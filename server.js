@@ -10,19 +10,26 @@ const PORT = 3000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static('public')); // Asume que tu HTML/CSS está en una carpeta 'public'
+app.use(express.static('public')); 
 
 // Rutas a los archivos de datos
 const INVENTARIO_FILE = path.join(__dirname, 'datos', 'inventario.json');
 const VENTAS_FILE = path.join(__dirname, 'datos', 'ventas.json');
+const COMPROBANTES_DIR = path.join(__dirname, 'comprobantes');
+
+// Asegurar que la carpeta de comprobantes y datos existan
+if (!fs.existsSync(path.join(__dirname, 'datos'))) {
+    fs.mkdirSync(path.join(__dirname, 'datos'));
+}
+if (!fs.existsSync(COMPROBANTES_DIR)) {
+    fs.mkdirSync(COMPROBANTES_DIR);
+}
 
 // --- FUNCIONES AUXILIARES ---
 
-// Función genérica para leer JSON
 function leerDatos(ruta) {
     try {
         if (!fs.existsSync(ruta)) {
-            // Si no existe, creamos un array vacío
             fs.writeFileSync(ruta, '[]');
             return [];
         }
@@ -34,7 +41,6 @@ function leerDatos(ruta) {
     }
 }
 
-// Función genérica para guardar JSON
 function guardarDatos(ruta, datos) {
     try {
         fs.writeFileSync(ruta, JSON.stringify(datos, null, 2));
@@ -42,6 +48,41 @@ function guardarDatos(ruta, datos) {
     } catch (error) {
         console.error(`Error guardando ${ruta}:`, error);
         return false;
+    }
+}
+
+// Función para generar el archivo de texto del ticket
+function generarTicketTxt(venta) {
+    const fecha = new Date();
+    // Nombre de archivo seguro
+    const nombreArchivo = `ticket_${fecha.getFullYear()}-${(fecha.getMonth()+1).toString().padStart(2, '0')}-${fecha.getDate().toString().padStart(2, '0')}_${fecha.getHours().toString().padStart(2, '0')}-${fecha.getMinutes().toString().padStart(2, '0')}-${fecha.getSeconds().toString().padStart(2, '0')}.txt`;
+    const rutaArchivo = path.join(COMPROBANTES_DIR, nombreArchivo);
+
+    let contenido = `========================================\n`;
+    contenido += `          COMPROBANTE DE VENTA          \n`;
+    contenido += `========================================\n`;
+    contenido += `Fecha: ${fecha.toLocaleDateString()} Hora: ${fecha.toLocaleTimeString()}\n`;
+    contenido += `ID Venta: ${Date.now()}\n`; 
+    contenido += `----------------------------------------\n`;
+    contenido += `PRODUCTOS:\n\n`;
+
+    venta.items.forEach((item, index) => {
+        contenido += `${index + 1}. ${item.nombre.toUpperCase()}\n`;
+        contenido += `   Cant: ${item.cantidad} x $${item.precio} = $${item.subtotal}\n`;
+    });
+
+    contenido += `----------------------------------------\n`;
+    contenido += `Subtotal:        $${venta.subtotal.toFixed(2)}\n`;
+    contenido += `IVA (${venta.iva_porcentaje}%):      $${(venta.total - venta.subtotal).toFixed(2)}\n`;
+    contenido += `========================================\n`;
+    contenido += `TOTAL:           $${venta.total.toFixed(2)}\n`;
+    contenido += `========================================\n`;
+
+    try {
+        fs.writeFileSync(rutaArchivo, contenido);
+        console.log(`Ticket generado: ${nombreArchivo}`);
+    } catch (err) {
+        console.error("Error generando ticket txt:", err);
     }
 }
 
@@ -59,11 +100,29 @@ app.get('/api/ventas', (req, res) => {
     res.json(ventas);
 });
 
-// 3. Registrar una Venta (Y actualizar stock)
+// 3. Obtener CAJA DIARIA (NUEVO)
+app.get('/api/caja-diaria', (req, res) => {
+    const ventas = leerDatos(VENTAS_FILE);
+    const hoy = new Date();
+
+    const ventasHoy = ventas.filter(v => {
+        const fechaVenta = new Date(v.fecha);
+        return fechaVenta.getDate() === hoy.getDate() &&
+               fechaVenta.getMonth() === hoy.getMonth() &&
+               fechaVenta.getFullYear() === hoy.getFullYear();
+    });
+
+    const totalCaja = ventasHoy.reduce((acc, v) => acc + (v.total || 0), 0);
+
+    res.json({
+        total: totalCaja,
+        cantidad: ventasHoy.length
+    });
+});
+
+// 4. Registrar Venta
 app.post('/api/ventas', (req, res) => {
     const nuevaVenta = req.body;
-    // Estructura esperada en req.body: 
-    // { items: [{id, cantidad, ...}], total, subtotal, ... }
 
     if (!nuevaVenta || !nuevaVenta.items) {
         return res.status(400).json({ error: 'Datos de venta inválidos' });
@@ -94,32 +153,27 @@ app.post('/api/ventas', (req, res) => {
 
     // C. Guardar la venta
     const ventas = leerDatos(VENTAS_FILE);
-    // Agregamos fecha si no viene
     nuevaVenta.fecha = nuevaVenta.fecha || new Date().toISOString();
     ventas.push(nuevaVenta);
     guardarDatos(VENTAS_FILE, ventas);
 
+    // D. Generar Ticket TXT
+    generarTicketTxt(nuevaVenta);
+
     res.json({ message: 'Venta registrada con éxito', venta: nuevaVenta });
 });
 
-// 4. Agregar/Actualizar Producto (Opcional, para administración)
+// 5. Agregar Producto Nuevo
 app.post('/api/productos', (req, res) => {
     const productoNuevo = req.body;
     const inventario = leerDatos(INVENTARIO_FILE);
     
-    const index = inventario.findIndex(p => p.id === productoNuevo.id);
-    if (index !== -1) {
-        // Actualizar existente
-        inventario[index] = { ...inventario[index], ...productoNuevo };
-    } else {
-        // Crear nuevo (asignar ID si no tiene)
-        if (!productoNuevo.id) {
-            const maxId = inventario.reduce((max, p) => p.id > max ? p.id : max, 0);
-            productoNuevo.id = maxId + 1;
-        }
-        inventario.push(productoNuevo);
+    if (!productoNuevo.id) {
+        const maxId = inventario.reduce((max, p) => p.id > max ? p.id : max, 0);
+        productoNuevo.id = maxId + 1;
     }
     
+    inventario.push(productoNuevo);
     guardarDatos(INVENTARIO_FILE, inventario);
     res.json({ message: 'Producto guardado', producto: productoNuevo });
 });
@@ -127,5 +181,6 @@ app.post('/api/productos', (req, res) => {
 // Iniciar servidor
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    console.log(`Datos leyendo de: ${path.join(__dirname, 'datos')}`);
+    console.log(`- Datos en: ${path.join(__dirname, 'datos')}`);
+    console.log(`- Comprobantes en: ${COMPROBANTES_DIR}`);
 });

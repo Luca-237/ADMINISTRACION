@@ -3,6 +3,24 @@
     "id": 1,
     "nombre": "remera",
     "precio": 4000,
-    "stock": 26
+    "stock": 19
+  },
+  {
+    "nombre": "Remera citroen negra",
+    "precio": 2000,
+    "stock": 0,
+    "id": 2
+  },
+  {
+    "nombre": "buzo bob marley xl negro",
+    "precio": 30000,
+    "stock": 12,
+    "id": 3
+  },
+  {
+    "nombre": "remera xl negra eternauta",
+    "precio": 12000,
+    "stock": 23,
+    "id": 4
   }
 ]

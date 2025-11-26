@@ -8,12 +8,39 @@
 </head>
 <body>
     <header>
-        <h1>Sistema de Ventas</h1>
+        <div class="header-left">
+            <h1>Sistema de Ventas</h1>
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Buscar producto..." oninput="filtrarProductos()">
+            </div>
+        </div>
+
+        <div class="caja-diaria-card">
+            <span class="caja-label">Caja del Día</span>
+            <span class="caja-monto" id="caja-dia-monto">$0.00</span>
+        </div>
     </header>
 
     <main>
         <section class="products-section">
-            <h2>Inventario Disponible</h2>
+            <div class="products-header">
+                <h2>Inventario</h2>
+                <button class="btn-secondary" onclick="toggleFormulario()">+ Nuevo Producto</button>
+            </div>
+
+            <div id="form-producto" class="form-producto hidden">
+                <h3>Agregar Producto</h3>
+                <div class="form-row">
+                    <input type="text" id="new-nombre" placeholder="Nombre">
+                    <input type="number" id="new-precio" placeholder="Precio ($)">
+                    <input type="number" id="new-stock" placeholder="Stock">
+                </div>
+                <div class="form-actions">
+                    <button class="btn-success" onclick="guardarProducto()">Guardar</button>
+                    <button class="btn-cancel" onclick="toggleFormulario()">Cancelar</button>
+                </div>
+            </div>
+
             <div id="products-grid" class="products-grid">
                 <p>Cargando productos...</p>
             </div>
@@ -22,21 +49,25 @@
         <section class="cart-section">
             <h2>Carrito de Compras</h2>
             <div id="cart-items" class="cart-items">
-                <p style="text-align: center; color: #999; margin-top: 2rem;">El carrito está vacío</p>
+                <p class="empty-msg">El carrito está vacío</p>
             </div>
 
             <div class="cart-summary">
                 <div class="summary-row">
                     <span>Subtotal:</span>
-                    <span id="subtotal">$0</span>
+                    <span id="subtotal">$0.00</span>
+                </div>
+                <div class="summary-row" style="align-items: center;">
+                    <span>IVA (%):</span>
+                    <input type="number" id="iva-rate" value="21" onchange="renderizarCarrito()" style="width: 50px; padding: 2px;">
                 </div>
                 <div class="summary-row">
-                    <span>IVA (21%):</span>
-                    <span id="iva">$0</span>
+                    <span>Monto IVA:</span>
+                    <span id="iva-amount">$0.00</span>
                 </div>
                 <div class="summary-row total-row">
                     <span>Total:</span>
-                    <span id="total">$0</span>
+                    <span id="total">$0.00</span>
                 </div>
                 <button id="btn-checkout" class="btn-checkout" onclick="procesarVenta()">Confirmar Venta</button>
             </div>
@@ -52,10 +83,15 @@
         const gridProductos = document.getElementById('products-grid');
         const listaCarrito = document.getElementById('cart-items');
         const elSubtotal = document.getElementById('subtotal');
-        const elIva = document.getElementById('iva');
+        const elIvaAmount = document.getElementById('iva-amount');
+        const elIvaRate = document.getElementById('iva-rate');
         const elTotal = document.getElementById('total');
+        const inputBusqueda = document.getElementById('search-input');
+        const formProducto = document.getElementById('form-producto');
+        const elCajaMonto = document.getElementById('caja-dia-monto');
 
-        // 1. Cargar productos al iniciar
+        // --- FUNCIONES DE INICIO ---
+        
         async function cargarInventario() {
             try {
                 const res = await fetch('/api/inventario');
@@ -67,14 +103,38 @@
             }
         }
 
-        // 2. Renderizar (dibujar) los productos en pantalla
-        function renderizarProductos() {
+        async function actualizarCajaDiaria() {
+            try {
+                const res = await fetch('/api/caja-diaria');
+                const data = await res.json();
+                elCajaMonto.textContent = `$${data.total.toFixed(2)}`;
+                
+                // Animación simple
+                elCajaMonto.style.color = '#4ade80';
+                setTimeout(() => elCajaMonto.style.color = '', 500);
+            } catch (error) {
+                console.error('Error cargando caja:', error);
+            }
+        }
+
+        // --- PRODUCTOS ---
+
+        function renderizarProductos(filtro = '') {
             gridProductos.innerHTML = '';
-            inventario.forEach(producto => {
+            
+            const productosFiltrados = inventario.filter(p => 
+                p.nombre.toLowerCase().includes(filtro.toLowerCase())
+            );
+
+            if (productosFiltrados.length === 0) {
+                gridProductos.innerHTML = '<p>No se encontraron productos.</p>';
+                return;
+            }
+
+            productosFiltrados.forEach(producto => {
                 const card = document.createElement('div');
                 card.className = 'product-card';
                 
-                // Deshabilitar botón si no hay stock
                 const sinStock = producto.stock <= 0;
                 
                 card.innerHTML = `
@@ -95,31 +155,93 @@
             });
         }
 
-        // 3. Lógica del Carrito
+        function filtrarProductos() {
+            const texto = inputBusqueda.value;
+            renderizarProductos(texto);
+        }
+
+        function toggleFormulario() {
+            formProducto.classList.toggle('hidden');
+        }
+
+        async function guardarProducto() {
+            const nombre = document.getElementById('new-nombre').value;
+            const precio = parseFloat(document.getElementById('new-precio').value);
+            const stock = parseInt(document.getElementById('new-stock').value);
+
+            if (!nombre || isNaN(precio) || isNaN(stock)) {
+                alert('Por favor complete todos los campos correctamente.');
+                return;
+            }
+
+            const nuevoProducto = { nombre, precio, stock };
+
+            try {
+                const res = await fetch('/api/productos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(nuevoProducto)
+                });
+
+                if (res.ok) {
+                    alert('Producto agregado correctamente');
+                    document.getElementById('new-nombre').value = '';
+                    document.getElementById('new-precio').value = '';
+                    document.getElementById('new-stock').value = '';
+                    toggleFormulario();
+                    cargarInventario(); 
+                } else {
+                    alert('Error al guardar producto');
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Error de conexión');
+            }
+        }
+
+        // --- CARRITO ---
+
         function agregarAlCarrito(id) {
             const producto = inventario.find(p => p.id === id);
             const itemEnCarrito = carrito.find(item => item.id === id);
+            const cantidadEnCarrito = itemEnCarrito ? itemEnCarrito.cantidad : 0;
 
-            // Verificar stock localmente antes de agregar
-            const cantidadActual = itemEnCarrito ? itemEnCarrito.cantidad : 0;
-            
-            if (producto.stock > cantidadActual) {
+            if (producto.stock > cantidadEnCarrito) {
                 if (itemEnCarrito) {
                     itemEnCarrito.cantidad++;
-                    itemEnCarrito.subtotal = itemEnCarrito.cantidad * itemEnCarrito.precio;
                 } else {
                     carrito.push({
                         id: producto.id,
                         nombre: producto.nombre,
                         precio: producto.precio,
-                        cantidad: 1,
-                        subtotal: producto.precio
+                        cantidad: 1
                     });
                 }
                 renderizarCarrito();
             } else {
-                alert('No hay más stock disponible de este producto.');
+                alert('No hay suficiente stock disponible.');
             }
+        }
+
+        function cambiarCantidad(id, delta) {
+            const item = carrito.find(i => i.id === id);
+            const producto = inventario.find(p => p.id === id);
+            
+            if (!item) return;
+
+            const nuevaCantidad = item.cantidad + delta;
+
+            if (nuevaCantidad > 0) {
+                if (delta > 0 && nuevaCantidad > producto.stock) {
+                    alert('No hay más stock disponible.');
+                    return;
+                }
+                item.cantidad = nuevaCantidad;
+            } else {
+                quitarDelCarrito(id);
+                return;
+            }
+            renderizarCarrito();
         }
 
         function quitarDelCarrito(id) {
@@ -134,7 +256,7 @@
             listaCarrito.innerHTML = '';
             
             if (carrito.length === 0) {
-                listaCarrito.innerHTML = '<p style="text-align: center; color: #999; margin-top: 2rem;">El carrito está vacío</p>';
+                listaCarrito.innerHTML = '<p class="empty-msg">El carrito está vacío</p>';
                 actualizarTotales(0);
                 return;
             }
@@ -142,18 +264,23 @@
             let subtotalAcumulado = 0;
 
             carrito.forEach(item => {
-                subtotalAcumulado += item.subtotal;
+                const subtotalItem = item.cantidad * item.precio;
+                subtotalAcumulado += subtotalItem;
                 
                 const div = document.createElement('div');
                 div.className = 'cart-item';
                 div.innerHTML = `
                     <div class="cart-item-info">
-                        <h4>${item.nombre} (x${item.cantidad})</h4>
+                        <h4>${item.nombre}</h4>
                         <span>$${item.precio} c/u</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <strong>$${item.subtotal}</strong>
-                        <button class="btn-remove" onclick="quitarDelCarrito(${item.id})">X</button>
+                    <div class="cart-controls">
+                        <button class="btn-qty" onclick="cambiarCantidad(${item.id}, -1)">-</button>
+                        <span class="qty-display">${item.cantidad}</span>
+                        <button class="btn-qty" onclick="cambiarCantidad(${item.id}, 1)">+</button>
+                    </div>
+                    <div class="cart-price">
+                        <strong>$${subtotalItem}</strong>
                     </div>
                 `;
                 listaCarrito.appendChild(div);
@@ -163,30 +290,32 @@
         }
 
         function actualizarTotales(subtotal) {
-            const iva = subtotal * 0.21;
+            const tasaIva = parseFloat(elIvaRate.value) || 0;
+            const iva = subtotal * (tasaIva / 100);
             const total = subtotal + iva;
 
             elSubtotal.textContent = `$${subtotal.toFixed(2)}`;
-            elIva.textContent = `$${iva.toFixed(2)}`;
+            elIvaAmount.textContent = `$${iva.toFixed(2)}`;
             elTotal.textContent = `$${total.toFixed(2)}`;
         }
 
-        // 4. Procesar Venta (Enviar al Backend)
         async function procesarVenta() {
             if (carrito.length === 0) {
                 alert('El carrito está vacío.');
                 return;
             }
 
-            const subtotal = carrito.reduce((acc, item) => acc + item.subtotal, 0);
-            const iva = subtotal * 0.21;
-            const total = subtotal + iva;
+            const subtotalText = elSubtotal.textContent.replace('$','');
+            const subtotal = parseFloat(subtotalText);
+            const tasaIva = parseFloat(elIvaRate.value);
+            const totalText = elTotal.textContent.replace('$','');
+            const total = parseFloat(totalText);
 
             const ventaData = {
                 fecha: new Date().toISOString(),
-                items: carrito,
+                items: carrito.map(i => ({...i, subtotal: i.cantidad * i.precio})),
                 subtotal: subtotal,
-                iva_porcentaje: 21,
+                iva_porcentaje: tasaIva,
                 total: total
             };
 
@@ -200,21 +329,23 @@
                 const resultado = await res.json();
 
                 if (res.ok) {
-                    alert('¡Venta realizada con éxito!');
-                    carrito = []; // Vaciar carrito
+                    alert('¡Venta realizada con éxito! Ticket generado.');
+                    carrito = [];
                     renderizarCarrito();
-                    cargarInventario(); // Recargar productos para ver stock actualizado
+                    cargarInventario(); // Recargar stock
+                    actualizarCajaDiaria(); // Actualizar caja
                 } else {
                     alert('Error: ' + resultado.error);
                 }
             } catch (error) {
                 console.error('Error procesando venta:', error);
-                alert('Error de conexión al procesar la venta.');
+                alert('Error de conexión.');
             }
         }
 
-        // Iniciar
+        // Inicio
         cargarInventario();
+        actualizarCajaDiaria();
     </script>
 </body>
 </html>
