@@ -1,0 +1,102 @@
+[
+  {
+    "fecha": "2025-11-26T13:06:54.188Z",
+    "items": [
+      {
+        "id": 1,
+        "nombre": "remera",
+        "precio": 4000,
+        "cantidad": 6,
+        "subtotal": 24000
+      }
+    ],
+    "subtotal": 24000,
+    "iva_porcentaje": 21,
+    "total": 29040
+  },
+  {
+    "fecha": "2025-11-26T20:55:42.296Z",
+    "items": [
+      {
+        "id": 2,
+        "nombre": "Remera citroen negra",
+        "precio": 2000,
+        "cantidad": 2,
+        "subtotal": 4000
+      },
+      {
+        "id": 1,
+        "nombre": "remera",
+        "precio": 4000,
+        "cantidad": 6,
+        "subtotal": 24000
+      }
+    ],
+    "subtotal": 28000,
+    "iva_porcentaje": 21,
+    "total": 33880
+  },
+  {
+    "fecha": "2025-11-26T21:00:06.987Z",
+    "items": [
+      {
+        "id": 2,
+        "nombre": "Remera citroen negra",
+        "precio": 2000,
+        "cantidad": 1,
+        "subtotal": 2000
+      },
+      {
+        "id": 1,
+        "nombre": "remera",
+        "precio": 4000,
+        "cantidad": 1,
+        "subtotal": 4000
+      }
+    ],
+    "subtotal": 6000,
+    "iva_porcentaje": 21,
+    "total": 7260
+  },
+  {
+    "items": [
+      {
+        "id": 4,
+        "nombre": "remera xl negra eternauta",
+        "precio": 12000,
+        "cantidad": 1,
+        "subtotal": 12000
+      }
+    ],
+    "subtotal": 12000,
+    "iva_porcentaje": 21,
+    "total": 14520,
+    "fecha": "2025-12-05T14:04:46.686Z"
+  },
+  {
+    "items": [
+      {
+        "nombre": "remera xl negra eternauta",
+        "precio": 12000,
+        "stock": 22,
+        "id": 4,
+        "cantidad": 1,
+        "subtotal": 12000
+      },
+      {
+        "nombre": "buzo bob marley xl negro",
+        "precio": 30000,
+        "stock": 12,
+        "id": 3,
+        "cantidad": 1,
+        "subtotal": 30000
+      }
+    ],
+    "subtotal": 42000,
+    "total": 50820,
+    "iva_porcentaje": 21,
+    "medioPago": "Efectivo",
+    "id": 1764948819901,
+    "fecha": "2025-12-05T15:33:39.901Z"
+  }
+]

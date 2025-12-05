@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Punto de Venta</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>Sistema de Ventas</h1>
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Buscar producto..." oninput="filtrarProductos()">
+            </div>
+        </div>
+        <div class="caja-diaria-card">
+            <span class="caja-label">Caja del Día</span>
+            <span class="caja-monto" id="caja-dia-monto">$0.00</span>
+        </div>
+    </header>
+
+    <main>
+        <section class="products-section">
+            <div class="products-header">
+                <h2>Inventario</h2>
+                <button class="btn-secondary" onclick="toggleFormulario()">+ Nuevo Producto</button>
+            </div>
+
+            <div id="form-producto" class="form-producto hidden">
+                <h3>Agregar Producto</h3>
+                <div class="form-row">
+                    <input type="text" id="new-nombre" placeholder="Nombre">
+                    <input type="number" id="new-precio" placeholder="Precio">
+                    <input type="number" id="new-stock" placeholder="Stock">
+                </div>
+                <div class="form-actions">
+                    <button class="btn-success" onclick="guardarProducto()">Guardar</button>
+                    <button class="btn-cancel" onclick="toggleFormulario()">Cancelar</button>
+                </div>
+            </div>
+
+            <div id="products-grid" class="products-grid"></div>
+        </section>
+
+        <section class="cart-section">
+            <h2 class="section-title">Carrito</h2>
+            <div id="cart-items" class="cart-items">
+                <p class="empty-msg">Vacío</p>
+            </div>
+            <div class="cart-summary">
+                <div class="summary-row"><span>Subtotal:</span><span id="subtotal">$0.00</span></div>
+                <div class="summary-row">
+                    <span>IVA (%):</span>
+                    <input type="number" id="iva-rate" value="21" onchange="renderizarCarrito()" style="width:50px">
+                </div>
+                <div class="summary-row total-row"><span>Total:</span><span id="total">$0.00</span></div>
+                <button id="btn-checkout" class="btn-checkout" onclick="abrirModalPago()">Confirmar Selección</button>
+            </div>
+            <div class="history-container">
+                <h3>Últimas Ventas</h3>
+                <div id="history-list"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="modal-pago" class="modal hidden">
+        <div class="modal-content">
+            <h2>Método de Pago</h2>
+            <p>Seleccione cómo abonará el cliente:</p>
+            <div class="payment-options">
+                <button class="btn-pay" onclick="procesarVenta('Efectivo')">💵 Efectivo</button>
+                <button class="btn-pay" onclick="procesarVenta('Tarjeta')">💳 Tarjeta</button>
+                <button class="btn-pay" onclick="procesarVenta('Transferencia')">🏦 Transferencia</button>
+            </div>
+            <button class="btn-cancel-modal" onclick="cerrarModales()">Cancelar</button>
+        </div>
+    </div>
+
+    <div id="modal-ticket" class="modal hidden">
+        <div class="modal-content">
+            <div class="success-icon">✅</div>
+            <h2>¡Venta Exitosa!</h2>
+            <div class="ticket-info">
+                <p>Total: <strong id="ticket-final-total">$0.00</strong></p>
+                <p>Pago: <span id="ticket-medio"></span></p>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-print" onclick="imprimirTicket()">🖨️ Imprimir Ticket</button>
+                <button class="btn-close" onclick="finalizarTodo()">Nueva Venta</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let inventario = [];
+        let carrito = [];
+        let ventaRecienteID = null; // Guardamos el ID de la venta recién hecha
+
+        // Referencias DOM
+        const grid = document.getElementById('products-grid');
+        const cartList = document.getElementById('cart-items');
+        const modalPago = document.getElementById('modal-pago');
+        const modalTicket = document.getElementById('modal-ticket');
+
+        async function init() {
+            await cargarInventario();
+            actualizarCaja();
+            cargarHistorial();
+        }
+
+        async function cargarInventario() {
+            const res = await fetch('/api/inventario');
+            inventario = await res.json();
+            renderizarProductos();
+        }
+
+        function renderizarProductos(filtro='') {
+            grid.innerHTML = '';
+            const data = inventario.filter(p => p.nombre.toLowerCase().includes(filtro.toLowerCase()));
+            data.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    <div class="product-name">${p.nombre}</div>
+                    <div class="product-price">$${p.precio}</div>
+                    <div class="product-stock">Stock: ${p.stock}</div>
+                    <button class="btn-add" onclick="agregar(${p.id})" ${p.stock<=0?'disabled':''}>Agregar</button>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function agregar(id) {
+            const p = inventario.find(x => x.id === id);
+            const item = carrito.find(x => x.id === id);
+            if(item) {
+                if(item.cantidad < p.stock) item.cantidad++;
+            } else {
+                carrito.push({ ...p, cantidad: 1 });
+            }
+            renderizarCarrito();
+        }
+
+        function renderizarCarrito() {
+            cartList.innerHTML = '';
+            let subtotal = 0;
+            carrito.forEach((item, idx) => {
+                subtotal += item.cantidad * item.precio;
+                const div = document.createElement('div');
+                div.className = 'cart-item';
+                div.innerHTML = `
+                    <span>${item.nombre} x${item.cantidad}</span>
+                    <span>$${(item.cantidad*item.precio).toFixed(2)}</span>
+                    <button class="btn-qty" onclick="quitar(${idx})">🗑️</button>
+                `;
+                cartList.appendChild(div);
+            });
+            
+            const iva = subtotal * (document.getElementById('iva-rate').value / 100);
+            document.getElementById('subtotal').textContent = `$${subtotal.toFixed(2)}`;
+            document.getElementById('total').textContent = `$${(subtotal + iva).toFixed(2)}`;
+        }
+
+        function quitar(idx) {
+            carrito.splice(idx, 1);
+            renderizarCarrito();
+        }
+
+        // --- FLUJO DE PAGO ---
+
+        function abrirModalPago() {
+            if (carrito.length === 0) return alert("El carrito está vacío");
+            modalPago.classList.remove('hidden');
+        }
+
+        function cerrarModales() {
+            modalPago.classList.add('hidden');
+            modalTicket.classList.add('hidden');
+        }
+
+        async function procesarVenta(medioPago) {
+            const subtotal = parseFloat(document.getElementById('subtotal').innerText.replace('$',''));
+            const total = parseFloat(document.getElementById('total').innerText.replace('$',''));
+            const ivaRate = parseFloat(document.getElementById('iva-rate').value);
+
+            const venta = {
+                items: carrito.map(i => ({...i, subtotal: i.precio*i.cantidad})),
+                subtotal, total, iva_porcentaje: ivaRate,
+                medioPago: medioPago // Enviamos el medio de pago
+            };
+
+            try {
+                const res = await fetch('/api/ventas', {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(venta)
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    // Guardamos ID y mostramos modal de éxito
+                    ventaRecienteID = data.venta.id;
+                    document.getElementById('ticket-final-total').innerText = `$${total.toFixed(2)}`;
+                    document.getElementById('ticket-medio').innerText = medioPago;
+                    
+                    modalPago.classList.add('hidden');
+                    modalTicket.classList.remove('hidden');
+                    
+                    // Limpieza parcial (UI del fondo)
+                    carrito = [];
+                    renderizarCarrito();
+                    cargarInventario();
+                    actualizarCaja();
+                    cargarHistorial();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) { alert('Error de conexión'); }
+        }
+
+        async function imprimirTicket() {
+            if (!ventaRecienteID) return;
+            try {
+                const res = await fetch(`/api/imprimir/${ventaRecienteID}`, { method: 'POST' });
+                if (res.ok) alert("Imprimiendo...");
+                else alert("Error al conectar con la impresora");
+            } catch (e) { alert("Error de red"); }
+        }
+
+        function finalizarTodo() {
+            cerrarModales();
+            ventaRecienteID = null;
+        }
+
+        // --- EXTRA ---
+        async function actualizarCaja() {
+            const res = await fetch('/api/caja-diaria');
+            const d = await res.json();
+            document.getElementById('caja-dia-monto').innerText = `$${d.total.toFixed(2)}`;
+        }
+
+        async function cargarHistorial() {
+            const res = await fetch('/api/ventas-recientes');
+            const list = await res.json();
+            const cont = document.getElementById('history-list');
+            cont.innerHTML = '';
+            list.forEach(v => {
+                const d = document.createElement('div');
+                d.className = 'history-item';
+                d.innerHTML = `<span>${new Date(v.fecha).toLocaleTimeString()}</span> <strong>$${v.total.toFixed(2)}</strong>`;
+                cont.appendChild(d);
+            });
+        }
+
+        function toggleFormulario() { document.getElementById('form-producto').classList.toggle('hidden'); }
+        function guardarProducto() { /* Lógica existente resumida */ } // Usa tu lógica original aquí si quieres
+        
+        init();
+    </script>
+</body>
+</html>
